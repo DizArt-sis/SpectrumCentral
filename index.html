@@ -1,14 +1,134 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>RF Spectrum Control</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
-    <h1>Проверка</h1>
+
+    <h2>RF Spectrum Control System</h2>
+
+    <label>Устройство:</label>
+    <input type="text" id="device" value="device1"><br><br>
+
+    <label>Диапазон:</label>
+    <select id="range">
+        <option value="100 200">100–200 MHz</option>
+        <option value="400 500">400–500 MHz</option>
+        <option value="500 600" selected>500–600 MHz</option>
+        <option value="800 900">800–900 MHz</option>
+    </select>
+
+    <br><br>
+
+    <button onclick="startScan()">Старт</button>
+    <button onclick="stopScan()">Стоп</button>
+
+    <h3>Спектр:</h3>
+    <canvas id="spectrumChart"></canvas>
+
+    <script>
+
+        let chart;
+        let interval;
+        let currentData = [];
+
+        function smoothData(newData) {
+            if (currentData.length === 0) {
+                currentData = newData;
+                return newData;
+            }
+
+            return newData.map((val, i) => currentData[i] * 0.7 + val * 0.3);
+        }
+
+        async function scan() {
+            let device = document.getElementById("device").value;
+            let range = document.getElementById("range").value;
+
+            let cmd = `scan_spectrum ${range}`;
+
+            let response = await fetch(`/send_command?device=${device}&cmd=${cmd}`);
+            let data = await response.json();
+
+            if (!data.response) return;
+
+            let spectrum = JSON.parse(data.response);
+
+            let freqs = spectrum.map(p => p.freq);
+            let powers = spectrum.map(p => p.power);
+
+            powers = smoothData(powers);
+            currentData = powers;
+
+            drawChart(freqs, powers);
+        }
+
+        function drawChart(freqs, powers) {
+            const ctx = document.getElementById('spectrumChart').getContext('2d');
+
+            if (chart) chart.destroy();
+
+            let peaks = powers.map(p => p > -60 ? p : null);
+
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: freqs,
+                    datasets: [
+                        {
+                            label: 'Спектр',
+                            data: powers,
+                            borderWidth: 2,
+                            tension: 0.3
+                        },
+                        {
+                            label: 'Сигналы',
+                            data: peaks,
+                            pointRadius: 5,
+                            showLine: false
+                        }
+                    ]
+                },
+                options: {
+                    animation: {
+                        duration: 500
+                    },
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Частота (MHz)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Мощность (dBm)'
+                            },
+                            min: -100,
+                            max: -20
+                        }
+                    }
+                }
+            });
+        }
+
+        function startScan() {
+            if (!interval) {
+                interval = setInterval(scan, 1000);
+            }
+        }
+
+        function stopScan() {
+            clearInterval(interval);
+            interval = null;
+        }
+
+    </script>
+
 </body>
 
 </html>
