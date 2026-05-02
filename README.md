@@ -88,7 +88,7 @@ rf-spectrum-control-system/
 ```
 # 1. Клонирование репозитория
 git clone https://github.com/DizArt-sis/SpectrumCentral.git
-cd rf-spectrum-control-system
+cd SpectrumCentral
 
 # 2. Создание виртуального окружения
 python3 -m venv venv
