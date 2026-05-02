@@ -87,7 +87,7 @@ rf-spectrum-control-system/
 ### Установка
 ```
 # 1. Клонирование репозитория
-git clone https://github.com/yourusername/rf-spectrum-control-system.git
+git clone https://github.com/DizArt-sis/SpectrumCentral.git
 cd rf-spectrum-control-system
 
 # 2. Создание виртуального окружения
@@ -128,3 +128,11 @@ python3 agent_emulator.py  # Для эмулятора
 | **Generic DVB-T Dongle** | RTL2832U | 52-1700 MHz |✅ Поддерживается|
 | **HackRF One** | - | 1-6000 MHz |🔄 В планах|
 | **LimeSDR** | LMS7002M | 0.1-3800 MHz |🔄 В планах|
+
+### 🎮 Использование
+#### Веб-интерфейс
+1) Выбор устройства - переключение между доступными анализаторами
+2) Выбор диапазона - предустановленные диапазоны или ввод вручную
+3) Настройка параметров - RBW, аттенюатор, сглаживание
+4) Управление сканированием - старт/стоп/одиночное измерение
+5) Экспорт данных - сохранение в CSV для дальнейшего анализа
