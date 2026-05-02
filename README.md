@@ -62,3 +62,69 @@
 ---
 
 ## 📁 Структура проекта
+```
+rf-spectrum-control-system/
+│
+├── backend.py                 # FastAPI сервер (ядро системы)
+├── agent_sdr.py              # Реальный SDR агент (RTL-SDR)
+├── agent_emulator.py         # Эмулятор для тестирования
+├── index.html                # Веб-интерфейс
+├── requirements.txt          # Python зависимости
+└── README.md                 # Документация
+```
+
+
+---
+
+## 🚀 Быстрый старт
+
+### 📋 Требования
+
+- **Python 3.8+**
+- **MQTT Broker** (Mosquitto)
+- **RTL-SDR** (опционально, для реального оборудования)
+
+### Установка
+```
+# 1. Клонирование репозитория
+git clone https://github.com/yourusername/rf-spectrum-control-system.git
+cd rf-spectrum-control-system
+
+# 2. Создание виртуального окружения
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# venv\Scripts\activate   # Windows
+
+# 3. Установка зависимостей
+pip install -r requirements.txt
+
+# 4. Установка MQTT брокера (Ubuntu/Debian)
+sudo apt-get install mosquitto mosquitto-clients
+sudo systemctl start mosquitto
+
+# 5. (Опционально) Установка драйверов для RTL-SDR
+sudo apt-get install rtl-sdr
+```
+### Запуск
+```
+# Терминал 1: Запуск MQTT брокера (если не запущен)
+sudo systemctl start mosquitto
+
+# Терминал 2: Запуск backend сервера
+python3 backend.py
+
+# Терминал 3: Запуск агента (выберите один)
+python3 agent_sdr.py      # Для реального SDR
+# или
+python3 agent_emulator.py  # Для эмулятора
+```
+Откройте браузер: http://localhost:8000
+
+📡 Поддерживаемое оборудование
+| Устройство | Чипсет | Диапазон | Статус |
+|-----------|------------|------------|------------|
+| **RTL-SDR Blog V3** | RTL2832U | 24-1700 MHz |✅ Полностью поддерживается|
+| **Nooelec NESDR** | RTL2832U | 50-1700 MHz |✅ Полностью поддерживается|
+| **Generic DVB-T Dongle** | RTL2832U | 52-1700 MHz |✅ Поддерживается|
+| **HackRF One** | - | 1-6000 MHz |🔄 В планах|
+| **LimeSDR** | LMS7002M | 0.1-3800 MHz |🔄 В планах|
