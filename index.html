@@ -321,7 +321,8 @@
                 <select id="smoothing">
                     <option value="0">Выкл</option>
                     <option value="0.3">Слабое</option>
-                    <option value="0.7" selected>Сильное</option>
+                    <option value="0.5" selected>Среднее</option>
+                    <option value="0.7">Сильное</option>
                 </select>
             </div>
             <div>
@@ -594,44 +595,121 @@
         }
 
         function updateStats(data) {
-            document.getElementById('maxPower').textContent = data.max_power.toFixed(1) + ' dBm';
-            document.getElementById('avgPower').textContent = data.avg_power.toFixed(1) + ' dBm';
-            document.getElementById('numSignals').textContent = data.num_signals;
+            // ✅ Нормализуем отображаемые значения
+            const maxPowerElem = document.getElementById('maxPower');
+            const avgPowerElem = document.getElementById('avgPower');
+            const numSignalsElem = document.getElementById('numSignals');
+            const noiseFloorElem = document.getElementById('noiseFloor');
 
-            if (currentPowers.length > 0) {
-                const noiseFloor = Math.min(...currentPowers);
-                document.getElementById('noiseFloor').textContent = noiseFloor.toFixed(1) + ' dBm';
+            // Максимальная мощность
+            let maxPower = data.max_power;
+            if (maxPower > -20) maxPower = -20;  // Ограничиваем
+            maxPowerElem.textContent = maxPower.toFixed(1) + ' dBm';
+
+            // Цветовая индикация максимальной мощности
+            if (maxPower > -40) {
+                maxPowerElem.style.color = '#ff6b6b';
+            } else if (maxPower > -55) {
+                maxPowerElem.style.color = '#ffd93d';
+            } else {
+                maxPowerElem.style.color = 'white';
             }
 
-            const totalSpan = document.getElementById('totalMeasurements');
-            totalSpan.textContent = parseInt(totalSpan.textContent || 0) + 1;
+            // Средняя мощность
+            let avgPower = data.avg_power;
+            if (avgPower > -50) avgPower = -50;  // Ограничиваем
+            avgPowerElem.textContent = avgPower.toFixed(1) + ' dBm';
+
+            // Количество сигналов (уже правильное из detectSignals)
+            numSignalsElem.textContent = data.num_signals || 0;
+
+            // Уровень шума (минимальное значение в спектре)
+            if (currentPowers.length > 0) {
+                let noiseFloor = Math.min(...currentPowers);
+                if (noiseFloor < -100) noiseFloor = -100;
+                noiseFloorElem.textContent = noiseFloor.toFixed(1) + ' dBm';
+            }
         }
 
         function detectSignals(spectrum) {
+            // ✅ Правильный порог обнаружения: -65 dBm
+            const SIGNAL_THRESHOLD = -65;
+            const MIN_PEAK_PROMINENCE = 5;  // Минимальное возвышение над шумом
+
             const signals = [];
-            for (let i = 1; i < spectrum.length - 1; i++) {
-                if (spectrum[i].power > -60 &&
-                    spectrum[i].power > spectrum[i - 1].power &&
-                    spectrum[i].power > spectrum[i + 1].power) {
-                    let level = spectrum[i].power > -40 ? 'КРИТИЧЕСКИЙ' :
-                        (spectrum[i].power > -50 ? 'ВЫСОКИЙ' : 'СРЕДНИЙ');
-                    signals.push(spectrum[i]);
+
+            for (let i = 2; i < spectrum.length - 2; i++) {
+                const curr = spectrum[i].power;
+                const prev = spectrum[i - 1].power;
+                const next = spectrum[i + 1].power;
+                const prev2 = spectrum[i - 2].power;
+                const next2 = spectrum[i + 2].power;
+
+                // ✅ Условия для настоящего пика:
+                // 1. Мощность выше порога
+                // 2. Является локальным максимумом
+                // 3. Достаточно "острый" (не пологий)
+                const isLocalMax = curr > prev && curr > next;
+                const isSharp = (curr - prev2) > MIN_PEAK_PROMINENCE && (curr - next2) > MIN_PEAK_PROMINENCE;
+                const isAboveThreshold = curr > SIGNAL_THRESHOLD;
+
+                if (isLocalMax && isSharp && isAboveThreshold) {
+                    let level = '';
+                    let color = '';
+                    if (curr > -40) {
+                        level = 'КРИТИЧЕСКИЙ';
+                        color = '#f44336';
+                    } else if (curr > -50) {
+                        level = 'ВЫСОКИЙ';
+                        color = '#ff9800';
+                    } else if (curr > -60) {
+                        level = 'СРЕДНИЙ';
+                        color = '#ffc107';
+                    } else {
+                        level = 'СЛАБЫЙ';
+                        color = '#4caf50';
+                    }
+
+                    signals.push({
+                        freq: spectrum[i].freq,
+                        power: curr,
+                        level: level,
+                        color: color,
+                        time: new Date().toLocaleTimeString()
+                    });
                 }
             }
 
+            // Отображение
             const signalsList = document.getElementById('signalsList');
             if (signals.length === 0) {
-                signalsList.innerHTML = '<p style="color: #999;">Сигналы не обнаружены</p>';
+                signalsList.innerHTML = '<p style="color: #999;">📡 Сигналы выше порога не обнаружены</p>';
             } else {
                 signalsList.innerHTML = `
-                    <table>
-                        <thead><tr><th>Частота (MHz)</th><th>Мощность (dBm)</th><th>Уровень</th></tr></thead>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: #f0f0f0;">
+                                <th style="padding: 8px; text-align: left;">Частота (MHz)</th>
+                                <th style="padding: 8px; text-align: left;">Мощность (dBm)</th>
+                                <th style="padding: 8px; text-align: left;">Уровень</th>
+                                <th style="padding: 8px; text-align: left;">Время</th>
+                            </tr>
+                        </thead>
                         <tbody>
-                            ${signals.map(s => `<tr><td><strong>${s.freq}</strong></td><td>${s.power}</td><td>${s.power > -40 ? '🔴' : (s.power > -50 ? '🟠' : '🟡')} ${s.power > -40 ? 'Критический' : (s.power > -50 ? 'Высокий' : 'Средний')}</td></tr>`).join('')}
+                            ${signals.map(s => `
+                                <tr style="border-left: 3px solid ${s.color};">
+                                    <td style="padding: 8px;"><strong>${s.freq}</strong></td>
+                                    <td style="padding: 8px;">${s.power.toFixed(1)}</td>
+                                    <td style="padding: 8px; color: ${s.color};">${s.level}</td>
+                                    <td style="padding: 8px;">${s.time}</td>
+                                </tr>
+                            `).join('')}
                         </tbody>
                     </table>
                 `;
             }
+
+            return signals;
         }
 
         // ==================== История и экспорт ====================

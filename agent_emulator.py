@@ -37,28 +37,29 @@ class EmulatorAnalyzer:
         self.center_freq = 500  # MHz
 
     def generate_spectrum(self, start_mhz, end_mhz, num_points=300):
-        """Генерация реалистичного спектра"""
+        """Генерация реалистичного спектра с правильными уровнями"""
         spectrum = []
 
-        # Базовый шум
-        noise_floor = -85
+        # ✅ Реалистичный уровень шума: -90 до -80 dBm
+        noise_floor = random.uniform(-92, -82)
 
-        # Генерируем несколько сигналов
+        # Генерируем 2-5 реальных сигналов (НЕ на каждую точку!)
         num_signals = random.randint(2, 5)
         signals = []
         for _ in range(num_signals):
             freq = random.uniform(start_mhz, end_mhz)
-            power = random.uniform(-55, -30)
-            width = random.uniform(2, 8)
+            # Мощность сигналов: от -65 до -35 dBm
+            power = random.uniform(-65, -35)
+            width = random.uniform(1.5, 5)
             signals.append({"freq": freq, "power": power, "width": width})
 
         for i in range(num_points):
             freq = start_mhz + (i / num_points) * (end_mhz - start_mhz)
 
-            # Шум
-            power = noise_floor + random.gauss(0, 3)
+            # ✅ Базовый шум - правильный уровень
+            power = noise_floor + random.gauss(0, 2)
 
-            # Добавляем сигналы
+            # Добавляем реальные сигналы (только в местах их наличия)
             for sig in signals:
                 distance = abs(freq - sig["freq"])
                 if distance < sig["width"]:
@@ -68,9 +69,9 @@ class EmulatorAnalyzer:
                     )
                     power = max(power, contribution)
 
-            # Иногда добавляем импульсную помеху
-            if random.random() < 0.02:
-                power += random.uniform(10, 20)
+            # ✅ Редкие импульсные помехи (не чаще 1-2%)
+            if random.random() < 0.01:
+                power += random.uniform(8, 15)
 
             spectrum.append(
                 {"freq": round(freq, 2), "power": round(max(min(power, -20), -100), 1)}
