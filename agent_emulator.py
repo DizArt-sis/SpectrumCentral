@@ -11,7 +11,7 @@ import random
 import math
 import logging
 from datetime import datetime
-
+# -----------------Конфигурация ------------------------
 BROKER_IP = "localhost"
 DEVICE_ID = "emulator_device1"
 
@@ -19,10 +19,11 @@ COMMAND_TOPIC = f"devices/{DEVICE_ID}/commands"
 RESPONSE_TOPIC = f"devices/{DEVICE_ID}/response"
 STATUS_TOPIC = f"devices/{DEVICE_ID}/status"
 INFO_TOPIC = f"devices/{DEVICE_ID}/info"
-
+# Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# ---------------------- Параметры -------------------
 class EmulatorAnalyzer:
     def __init__(self):
         self.rbw = 100
@@ -85,6 +86,7 @@ class EmulatorAnalyzer:
     def get_info(self):
         return {"type": "emulator", "device_id": DEVICE_ID, "rbw_khz": self.rbw}
 
+# ------------------- MQTT -------------------------
 analyzer = EmulatorAnalyzer()
 
 def on_connect(client, userdata, flags, rc):
@@ -134,7 +136,7 @@ def main():
     client.on_message = on_message
     
     print("=" * 50)
-    print("🎮 Emulator Agent (ИСПРАВЛЕННЫЙ)")
+    print("🎮 Emulator Agent ")
     print("=" * 50)
     
     client.connect(BROKER_IP, 1883, 60)
