@@ -1,77 +1,550 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 
 <head>
-    <title>RF Spectrum Control</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RF Spectrum Control System</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            color: white;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 30px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-led {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        .status-led.online {
+            background: #4CAF50;
+            box-shadow: 0 0 8px #4CAF50;
+        }
+
+        .status-led.offline {
+            background: #f44336;
+            animation: none;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .panel h3 {
+            margin-bottom: 15px;
+            color: #1a1a2e;
+            border-left: 4px solid #0f3460;
+            padding-left: 10px;
+        }
+
+        .control-group {
+            display: inline-block;
+            margin-right: 20px;
+            margin-bottom: 15px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        input,
+        select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+        }
+
+        button {
+            background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            margin: 5px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-size: 14px;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button.danger {
+            background: linear-gradient(135deg, #c0392b 0%, #e74c3c 100%);
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .stat-card .label {
+            font-size: 12px;
+            opacity: 0.8;
+            margin-bottom: 5px;
+        }
+
+        .stat-card .value {
+            font-size: 24px;
+            font-weight: bold;
+        }
+
+        .chart-container {
+            background: #f9f9f9;
+            border-radius: 10px;
+            padding: 15px;
+        }
+
+        canvas {
+            max-height: 400px;
+            width: 100%;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f0f0f0;
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background: #f5f5f5;
+        }
+
+        .alert-item {
+            padding: 10px;
+            margin: 8px 0;
+            border-left: 4px solid #f44336;
+            background: #ffebee;
+            border-radius: 8px;
+        }
+
+        .alert-item.warning {
+            border-left-color: #ff9800;
+            background: #fff3e0;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .panel {
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @media (max-width: 768px) {
+            .control-group {
+                display: block;
+                margin-right: 0;
+            }
+
+            .stats {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #0f3460;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
 </head>
 
 <body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📡 RF Spectrum Control System</h1>
+            <p>Централизованная система управления анализаторами спектра</p>
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-led" id="deviceStatusLed"></span>
+                    <span id="deviceStatusText">Проверка...</span>
+                </div>
+                <div class="status-item">
+                    <span>🕐 Последнее обновление:</span>
+                    <span id="lastUpdate">--:--:--</span>
+                </div>
+                <div class="status-item">
+                    <span>📊 Всего измерений:</span>
+                    <span id="totalMeasurements">0</span>
+                </div>
+            </div>
+        </div>
 
-    <h2>RF Spectrum Control System</h2>
+        <!-- Control Panel -->
+        <div class="panel">
+            <h3>🎮 Управление анализатором</h3>
+            <div class="control-group">
+                <label>Устройство</label>
+                <select id="deviceSelect" onchange="changeDevice()">
+                    <option value="sdr_device1">📡 SDR Анализатор (реальный)</option>
+                    <option value="emulator_device1">🎮 Эмулятор</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>Диапазон (MHz)</label>
+                <select id="rangeSelect">
+                    <option value="88,108">88 – 108 MHz (FM радио)</option>
+                    <option value="100,200">100 – 200 MHz</option>
+                    <option value="400,500">400 – 500 MHz</option>
+                    <option value="500,600" selected>500 – 600 MHz</option>
+                    <option value="800,1000">800 – 1000 MHz (GSM/LTE)</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>RBW (kHz)</label>
+                <input type="number" id="rbw" value="100" step="10">
+            </div>
+            <div class="control-group">
+                <label>Аттенюатор (dB)</label>
+                <input type="number" id="attenuation" value="10" step="5">
+            </div>
+            <div class="control-group">
+                <label>Сглаживание</label>
+                <select id="smoothing">
+                    <option value="0">Выкл</option>
+                    <option value="0.3">Слабое</option>
+                    <option value="0.7" selected>Сильное</option>
+                </select>
+            </div>
+            <div>
+                <button onclick="startScan()">▶ Старт</button>
+                <button onclick="stopScan()">⏹ Стоп</button>
+                <button onclick="singleScan()">🔄 Одиночное</button>
+                <button onclick="applySettings()">⚙ Применить</button>
+                <button onclick="exportData()">📥 Экспорт CSV</button>
+                <button onclick="clearChart()">🗑 Очистить</button>
+            </div>
+        </div>
 
-    <label>Устройство:</label>
-    <input type="text" id="device" value="device1"><br><br>
+        <!-- Statistics -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="label">Максимальная мощность</div>
+                <div class="value" id="maxPower">-- dBm</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Средняя мощность</div>
+                <div class="value" id="avgPower">-- dBm</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Обнаружено сигналов</div>
+                <div class="value" id="numSignals">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="label">Уровень шума</div>
+                <div class="value" id="noiseFloor">-- dBm</div>
+            </div>
+        </div>
 
-    <label>Диапазон:</label>
-    <select id="range">
-        <option value="100 200">100–200 MHz</option>
-        <option value="400 500">400–500 MHz</option>
-        <option value="500 600" selected>500–600 MHz</option>
-        <option value="800 900">800–900 MHz</option>
-    </select>
+        <!-- Spectrum Chart -->
+        <div class="panel">
+            <h3>📊 Спектр мощности</h3>
+            <div class="chart-container">
+                <canvas id="spectrumChart"></canvas>
+            </div>
+        </div>
 
-    <br><br>
+        <!-- Detected Signals -->
+        <div class="panel">
+            <h3>📡 Обнаруженные сигналы</h3>
+            <div id="signalsList"></div>
+        </div>
 
-    <button onclick="startScan()">Старт</button>
-    <button onclick="stopScan()">Стоп</button>
+        <!-- Alerts -->
+        <div class="panel">
+            <h3>⚠ Активные тревоги</h3>
+            <div id="alertsList"></div>
+        </div>
 
-    <h3>Спектр:</h3>
-    <canvas id="spectrumChart"></canvas>
+        <!-- History -->
+        <div class="panel">
+            <h3>📜 История измерений</h3>
+            <div style="overflow-x: auto;">
+                <table id="historyTable">
+                    <thead>
+                        <tr>
+                            <th>Время</th>
+                            <th>Диапазон</th>
+                            <th>Макс. мощность</th>
+                            <th>Сигналы</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyBody">
+                        <tr>
+                            <td colspan="5">Загрузка...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 
     <script>
+        let chart = null;
+        let scanInterval = null;
+        let currentFreqs = [];
+        let currentPowers = [];
+        let currentSpectrum = [];
 
-        let chart;
-        let interval;
-        let currentData = [];
+        // ==================== Инициализация ====================
+        async function init() {
+            await loadDevices();
+            await loadHistory();
+            await loadAlerts();
+            setInterval(loadDevices, 15000);
+            setInterval(loadAlerts, 30000);
+        }
 
-        function smoothData(newData) {
-            if (currentData.length === 0) {
-                currentData = newData;
-                return newData;
+        // ==================== Загрузка устройств ====================
+        async function loadDevices() {
+            try {
+                const response = await fetch('/api/devices');
+                const data = await response.json();
+
+                const select = document.getElementById('deviceSelect');
+                const currentValue = select.value;
+
+                if (data.devices && data.devices.length > 0) {
+                    select.innerHTML = '';
+                    data.devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.id;
+                        const typeIcon = device.type === 'rtl-sdr' ? '📡' : (device.type === 'emulator' ? '🎮' : '🔌');
+                        option.textContent = `${typeIcon} ${device.id} (${device.online ? '🟢' : '🔴'})`;
+                        select.appendChild(option);
+                    });
+                    select.value = currentValue;
+
+                    const selectedDevice = data.devices.find(d => d.id === select.value);
+                    if (selectedDevice) {
+                        const led = document.getElementById('deviceStatusLed');
+                        const text = document.getElementById('deviceStatusText');
+                        if (selectedDevice.online) {
+                            led.className = 'status-led online';
+                            text.textContent = 'Онлайн';
+                        } else {
+                            led.className = 'status-led offline';
+                            text.textContent = 'Оффлайн';
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Error loading devices:', e);
+            }
+        }
+
+        function changeDevice() {
+            loadDevices();
+            clearChart();
+        }
+
+        // ==================== Настройки ====================
+        async function applySettings() {
+            const device = document.getElementById('deviceSelect').value;
+            const rbw = document.getElementById('rbw').value;
+            const attenuation = document.getElementById('attenuation').value;
+
+            const url = `/api/device/configure?device=${device}&rbw=${rbw}&attenuation=${attenuation}`;
+
+            try {
+                const response = await fetch(url);
+                const result = await response.json();
+
+                if (response.ok) {
+                    console.log('Settings applied:', result);
+                } else {
+                    console.error('Settings error:', result);
+                }
+            } catch (e) {
+                console.error('Error applying settings:', e);
+            }
+        }
+
+        // ==================== Сканирование ====================
+        async function singleScan() {
+            const device = document.getElementById('deviceSelect').value;
+            const range = document.getElementById('rangeSelect').value.split(',');
+            const startFreq = parseFloat(range[0]);
+            const endFreq = parseFloat(range[1]);
+
+            try {
+                const response = await fetch(`/api/scan?device=${device}&start_freq=${startFreq}&end_freq=${endFreq}`);
+                const data = await response.json();
+
+                if (data.spectrum) {
+                    updateChart(data.spectrum);
+                    updateStats(data);
+                    detectSignals(data.spectrum);
+                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                    await loadHistory();
+                }
+            } catch (e) {
+                console.error('Scan error:', e);
+                alert('Ошибка сканирования: ' + e.message);
+            }
+        }
+
+        function startScan() {
+            if (scanInterval) clearInterval(scanInterval);
+            scanInterval = setInterval(singleScan, 3000);
+        }
+
+        function stopScan() {
+            if (scanInterval) {
+                clearInterval(scanInterval);
+                scanInterval = null;
+            }
+        }
+
+        // ==================== Обновление графика ====================
+        function updateChart(spectrum) {
+            const freqs = spectrum.map(p => p.freq);
+            const powers = spectrum.map(p => p.power);
+
+            const smoothFactor = parseFloat(document.getElementById('smoothing').value);
+            let smoothedPowers = powers;
+
+            if (smoothFactor > 0 && currentPowers.length === powers.length) {
+                smoothedPowers = powers.map((val, i) =>
+                    currentPowers[i] * smoothFactor + val * (1 - smoothFactor)
+                );
             }
 
-            return newData.map((val, i) => currentData[i] * 0.7 + val * 0.3);
-        }
+            currentFreqs = freqs;
+            currentPowers = smoothedPowers;
+            currentSpectrum = spectrum;
 
-        async function scan() {
-            let device = document.getElementById("device").value;
-            let range = document.getElementById("range").value;
-
-            let cmd = `scan_spectrum ${range}`;
-
-            let response = await fetch(`/send_command?device=${device}&cmd=${cmd}`);
-            let data = await response.json();
-
-            if (!data.response) return;
-
-            let spectrum = JSON.parse(data.response);
-
-            let freqs = spectrum.map(p => p.freq);
-            let powers = spectrum.map(p => p.power);
-
-            powers = smoothData(powers);
-            currentData = powers;
-
-            drawChart(freqs, powers);
-        }
-
-        function drawChart(freqs, powers) {
             const ctx = document.getElementById('spectrumChart').getContext('2d');
-
             if (chart) chart.destroy();
 
-            let peaks = powers.map(p => p > -60 ? p : null);
+            // Находим пики
+            const peaks = new Array(smoothedPowers.length).fill(null);
+            for (let i = 1; i < smoothedPowers.length - 1; i++) {
+                if (smoothedPowers[i] > smoothedPowers[i - 1] &&
+                    smoothedPowers[i] > smoothedPowers[i + 1] &&
+                    smoothedPowers[i] > -60) {
+                    peaks[i] = smoothedPowers[i];
+                }
+            }
 
             chart = new Chart(ctx, {
                 type: 'line',
@@ -79,56 +552,187 @@
                     labels: freqs,
                     datasets: [
                         {
-                            label: 'Спектр',
-                            data: powers,
+                            label: 'Спектр мощности',
+                            data: smoothedPowers,
+                            borderColor: '#0f3460',
+                            backgroundColor: 'rgba(15, 52, 96, 0.1)',
                             borderWidth: 2,
-                            tension: 0.3
+                            tension: 0.3,
+                            fill: true,
+                            pointRadius: 0
                         },
                         {
-                            label: 'Сигналы',
+                            label: 'Пики сигналов',
                             data: peaks,
+                            borderColor: '#e74c3c',
+                            backgroundColor: '#e74c3c',
                             pointRadius: 5,
-                            showLine: false
+                            pointHoverRadius: 8,
+                            showLine: false,
+                            type: 'scatter'
                         }
                     ]
                 },
                 options: {
-                    animation: {
-                        duration: 500
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return `${context.dataset.label}: ${context.raw} dBm`;
+                                }
+                            }
+                        }
                     },
                     scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Частота (MHz)'
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Мощность (dBm)'
-                            },
-                            min: -100,
-                            max: -20
-                        }
+                        x: { title: { display: true, text: 'Частота (MHz)' } },
+                        y: { title: { display: true, text: 'Мощность (dBm)' }, min: -100, max: -20 }
                     }
                 }
             });
         }
 
-        function startScan() {
-            if (!interval) {
-                interval = setInterval(scan, 1000);
+        function updateStats(data) {
+            document.getElementById('maxPower').textContent = data.max_power.toFixed(1) + ' dBm';
+            document.getElementById('avgPower').textContent = data.avg_power.toFixed(1) + ' dBm';
+            document.getElementById('numSignals').textContent = data.num_signals;
+
+            if (currentPowers.length > 0) {
+                const noiseFloor = Math.min(...currentPowers);
+                document.getElementById('noiseFloor').textContent = noiseFloor.toFixed(1) + ' dBm';
+            }
+
+            const totalSpan = document.getElementById('totalMeasurements');
+            totalSpan.textContent = parseInt(totalSpan.textContent || 0) + 1;
+        }
+
+        function detectSignals(spectrum) {
+            const signals = [];
+            for (let i = 1; i < spectrum.length - 1; i++) {
+                if (spectrum[i].power > -60 &&
+                    spectrum[i].power > spectrum[i - 1].power &&
+                    spectrum[i].power > spectrum[i + 1].power) {
+                    let level = spectrum[i].power > -40 ? 'КРИТИЧЕСКИЙ' :
+                        (spectrum[i].power > -50 ? 'ВЫСОКИЙ' : 'СРЕДНИЙ');
+                    signals.push(spectrum[i]);
+                }
+            }
+
+            const signalsList = document.getElementById('signalsList');
+            if (signals.length === 0) {
+                signalsList.innerHTML = '<p style="color: #999;">Сигналы не обнаружены</p>';
+            } else {
+                signalsList.innerHTML = `
+                    <table>
+                        <thead><tr><th>Частота (MHz)</th><th>Мощность (dBm)</th><th>Уровень</th></tr></thead>
+                        <tbody>
+                            ${signals.map(s => `<tr><td><strong>${s.freq}</strong></td><td>${s.power}</td><td>${s.power > -40 ? '🔴' : (s.power > -50 ? '🟠' : '🟡')} ${s.power > -40 ? 'Критический' : (s.power > -50 ? 'Высокий' : 'Средний')}</td></tr>`).join('')}
+                        </tbody>
+                    </table>
+                `;
             }
         }
 
-        function stopScan() {
-            clearInterval(interval);
-            interval = null;
+        // ==================== История и экспорт ====================
+        async function loadHistory() {
+            try {
+                const device = document.getElementById('deviceSelect').value;
+                const response = await fetch(`/api/history?device=${device}&limit=20`);
+                const data = await response.json();
+
+                const tbody = document.getElementById('historyBody');
+                if (data.measurements && data.measurements.length > 0) {
+                    tbody.innerHTML = data.measurements.map(m => `
+                        <tr>
+                            <td>${new Date(m.timestamp).toLocaleString()}</td>
+                            <td>${m.start_freq || '?'} - ${m.end_freq || '?'} MHz</td>
+                            <td>${m.max_power?.toFixed(1) || '--'} dBm</td>
+                            <td>${m.num_signals || 0}</td>
+                            <td><button onclick="exportMeasurement(${m.id})" style="padding: 4px 8px; font-size: 11px;">📥 CSV</button></td>
+                        </tr>
+                    `).join('');
+                } else {
+                    tbody.innerHTML = '<tr><td colspan="5">Нет сохраненных измерений</td></tr>';
+                }
+            } catch (e) {
+                console.error('Error loading history:', e);
+            }
         }
 
-    </script>
+        async function loadAlerts() {
+            try {
+                const device = document.getElementById('deviceSelect').value;
+                const response = await fetch(`/api/alerts?device=${device}&limit=10`);
+                const data = await response.json();
 
+                const alertsList = document.getElementById('alertsList');
+                if (data.alerts && data.alerts.length > 0) {
+                    alertsList.innerHTML = data.alerts.map(a => `
+                        <div class="alert-item ${a.power > -35 ? 'critical' : 'warning'}">
+                            <strong>⚠ ${new Date(a.timestamp).toLocaleTimeString()}</strong><br>
+                            Частота: ${a.frequency} MHz | Мощность: ${a.power} dBm<br>
+                            <small>${a.message || 'Превышение порога!'}</small>
+                        </div>
+                    `).join('');
+                } else {
+                    alertsList.innerHTML = '<p style="color: #999;">Нет активных тревог</p>';
+                }
+            } catch (e) {
+                console.error('Error loading alerts:', e);
+            }
+        }
+
+        function exportData() {
+            if (currentSpectrum.length === 0) {
+                alert('Нет данных для экспорта');
+                return;
+            }
+
+            let csv = "Frequency (MHz),Power (dBm)\n";
+            currentSpectrum.forEach(p => {
+                csv += `${p.freq},${p.power}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `spectrum_${new Date().toISOString().slice(0, 19)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        async function exportMeasurement(id) {
+            window.open(`/api/export/${id}`, '_blank');
+        }
+
+        function clearChart() {
+            if (chart) {
+                chart.destroy();
+                chart = null;
+            }
+            currentFreqs = [];
+            currentPowers = [];
+            currentSpectrum = [];
+
+            const ctx = document.getElementById('spectrumChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: 'line',
+                data: { datasets: [] },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { title: { display: true, text: 'Частота (MHz)' } },
+                        y: { title: { display: true, text: 'Мощность (dBm)' }, min: -100, max: -20 }
+                    }
+                }
+            });
+        }
+
+        // Запуск
+        init();
+    </script>
 </body>
 
 </html>
