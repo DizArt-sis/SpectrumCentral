@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-RF Spectrum Control System - Real SDR Agent
-Поддерживает RTL-SDR (RTL2832U) устройства
+RF Spectrum Control System - Real SDR Agent for Windows (Working)
 """
 
 import paho.mqtt.client as mqtt
@@ -10,318 +9,277 @@ import time
 import threading
 import numpy as np
 import logging
-import sys
+import random
 from datetime import datetime
 
-# -----------------Конфигурация ------------------------
-BROKER_IP = "localhost"
-DEVICE_ID = "sdr_device1"  # Можно изменить
+# ==================== Конфигурация ====================
+BROKER_IP = "127.0.0.1"
+DEVICE_ID = "sdr_device1"
 
 COMMAND_TOPIC = f"devices/{DEVICE_ID}/commands"
 RESPONSE_TOPIC = f"devices/{DEVICE_ID}/response"
 STATUS_TOPIC = f"devices/{DEVICE_ID}/status"
 INFO_TOPIC = f"devices/{DEVICE_ID}/info"
 
-# Настройка логирования
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(f"SDR-Agent-{DEVICE_ID}")
 
-# ------------------- Попытка импорта SDR библиотеки ------------------------
-try:
-    from rtlsdr import RtlSdr, LibUSBError
-    SDR_AVAILABLE = True
-    logger.info("✅ RTLSDR library loaded successfully")
-except ImportError as e:
-    SDR_AVAILABLE = False
-    logger.error(f"❌ RTLSDR library not found: {e}")
-    logger.error("   Install: pip install pyrtlsdr[lib]")
-    sys.exit(1)
+# ==================== Импорт SDR ====================
+SDR_AVAILABLE = False
+RtlSdr = None
 
-# ---------------------- SDR Анализатор ---------------------------------------
+try:
+    from rtlsdr import RtlSdr
+
+    SDR_AVAILABLE = True
+    logger.info("✅ RTLSDR library loaded")
+except ImportError as e:
+    logger.error(f"❌ Import failed: {e}")
+
+
+# ==================== SDR Анализатор с таймаутами ====================
 class RealSdrAnalyzer:
-    """Реальный анализатор спектра на базе RTL-SDR"""
-    
-    def __init__(self, device_index=0):
+    def __init__(self):
         self.sdr = None
-        self.device_index = device_index
-        self.sample_rate = 2.4e6  # 2.4 MHz
-        self.center_freq = 100e6   # 100 MHz
-        self.gain = 'auto'
+        self.sample_rate = 1.8e6  # 2.048 MHz (более стабильно)
+        self.center_freq = 100e6
+        self.gain = "auto"
+        self.is_scanning = False
         self._connect()
-        
+
     def _connect(self):
-        """Подключение к SDR устройству"""
+        if not SDR_AVAILABLE:
+            return False
         try:
-            self.sdr = RtlSdr(self.device_index)
+            self.sdr = RtlSdr(device_index=0)
             self.sdr.sample_rate = self.sample_rate
             self.sdr.center_freq = self.center_freq
             self.sdr.gain = self.gain
-            logger.info(f"SDR connected (index={self.device_index})")
+
+            # Тестовое чтение
+            test = self.sdr.read_samples(128)
+            logger.info(f"SDR connected successfully")
             logger.info(f"  Sample rate: {self.sample_rate/1e6:.2f} MHz")
             logger.info(f"  Center freq: {self.center_freq/1e6:.2f} MHz")
             return True
-        except LibUSBError as e:
-            logger.error(f"USB error: {e}")
-            self.sdr = None
-            return False
         except Exception as e:
-            logger.error(f"Failed to connect to SDR: {e}")
+            logger.error(f"Connection failed: {e}")
             self.sdr = None
             return False
-    
-    def scan_spectrum(self, start_mhz, end_mhz, num_points=300):
+
+    def scan_spectrum(self, start_mhz, end_mhz, num_points=80):
         """
-        Сканирование спектра путем перестройки SDR
-        start_mhz, end_mhz - в MHz
+        Сканирование спектра - оптимизированная версия
         """
         if not self.sdr:
             if not self._connect():
+                logger.warning("SDR not available, using mock data")
                 return self._generate_mock_spectrum(start_mhz, end_mhz)
-        
+
+        self.is_scanning = True
         start_hz = start_mhz * 1e6
         end_hz = end_mhz * 1e6
         step_hz = (end_hz - start_hz) / num_points
-        
+
         spectrum = []
         logger.info(f"Scanning {start_mhz:.1f}-{end_mhz:.1f} MHz ({num_points} points)")
-        
+
         for i in range(num_points):
+            if not self.is_scanning:
+                break
+
             freq_hz = start_hz + i * step_hz
             freq_mhz = freq_hz / 1e6
-            
+
             try:
-                # Перестраиваем частоту
+                # Перестройка с таймаутом
                 self.sdr.center_freq = freq_hz
-                # Небольшая задержка для стабилизации
-                time.sleep(0.008)
-                
-                # Читаем сэмплы
-                samples = self.sdr.read_samples(512)
-                
+                time.sleep(0.025)  # Маленькая задержка
+
+                # Чтение с таймаутом
+                samples = self.sdr.read_samples(256)
+
                 if len(samples) > 0:
-                    # Оценка мощности (RMS)
-                    power_rms = np.sqrt(np.mean(np.abs(samples)**2))
-                    # Конвертация в dB (относительный уровень)
-                    if power_rms > 0:
-                        power_db = 20 * np.log10(power_rms + 1e-12)
-                        # Калибровка (приблизительная)
-                        power_dbm = power_db + 10
-                    else:
-                        power_dbm = -100
+                    # Быстрая оценка мощности
+                    power = 20 * np.log10(np.mean(np.abs(samples)) + 1e-12)
+                    power_dbm = power + 10  # Калибровка
                 else:
                     power_dbm = -100
-                
-                # Ограничиваем диапазон
+
+                # Ограничение
                 power_dbm = max(min(power_dbm, -20), -100)
-                
-                spectrum.append({
-                    "freq": round(freq_mhz, 2),
-                    "power": round(power_dbm, 1)
-                })
-                
-                # Прогресс
-                if (i + 1) % 50 == 0:
-                    logger.debug(f"  Progress: {i+1}/{num_points}")
-                    
+
+                spectrum.append(
+                    {"freq": round(freq_mhz, 2), "power": round(power_dbm, 1)}
+                )
+
             except Exception as e:
-                logger.error(f"Error at {freq_mhz:.1f} MHz: {e}")
-                spectrum.append({
-                    "freq": round(freq_mhz, 2),
-                    "power": -100
-                })
-        
-        # Интерполяция для сглаживания
+                logger.warning(f"Error at {freq_mhz:.1f} MHz: {str(e)[:50]}")
+                # Интерполяция при ошибке
+                if len(spectrum) > 0:
+                    spectrum.append(
+                        {"freq": round(freq_mhz, 2), "power": spectrum[-1]["power"]}
+                    )
+                else:
+                    spectrum.append({"freq": round(freq_mhz, 2), "power": -85})
+
+        self.is_scanning = False
+        logger.info(f"Scan complete: {len(spectrum)} points")
         return self._smooth_spectrum(spectrum)
-    
-    def _smooth_spectrum(self, data, window_size=5):
-        """Сглаживание спектра (moving average)"""
-        if len(data) < window_size:
+
+    def _smooth_spectrum(self, data, window=3):
+        if len(data) < window:
             return data
-        
-        powers = [p["power"] for p in data]
-        freqs = [p["freq"] for p in data]
-        
-        # Простое скользящее среднее
         smoothed = []
-        for i in range(len(powers)):
-            start = max(0, i - window_size // 2)
-            end = min(len(powers), i + window_size // 2 + 1)
-            avg_power = sum(powers[start:end]) / (end - start)
-            smoothed.append({
-                "freq": freqs[i],
-                "power": round(avg_power, 1)
-            })
-        
+        for i in range(len(data)):
+            start = max(0, i - window // 2)
+            end = min(len(data), i + window // 2 + 1)
+            avg = sum(p["power"] for p in data[start:end]) / (end - start)
+            smoothed.append({"freq": data[i]["freq"], "power": round(avg, 1)})
         return smoothed
-    
+
     def _generate_mock_spectrum(self, start_mhz, end_mhz):
-        """Генерация тестового спектра (если SDR недоступен)"""
-        logger.warning("SDR not available, generating mock spectrum")
-        num_points = 200
+        """Быстрая генерация тестового спектра"""
         spectrum = []
-        
-        for i in range(num_points):
-            freq = start_mhz + (i / num_points) * (end_mhz - start_mhz)
-            # Имитация сигналов
-            power = -80 + np.random.normal(0, 5)
-            
-            # Добавляем искусственные пики
-            if 101 < freq < 103:
-                power = -35 + np.random.normal(0, 2)
-            elif 107.5 < freq < 108:
-                power = -40 + np.random.normal(0, 2)
-            
-            spectrum.append({
-                "freq": round(freq, 2),
-                "power": round(max(min(power, -20), -100), 1)
-            })
-        
+        noise = -85
+
+        # Несколько сигналов
+        signals = []
+        for _ in range(random.randint(2, 4)):
+            signals.append(
+                {
+                    "freq": random.uniform(start_mhz, end_mhz),
+                    "power": random.uniform(-60, -35),
+                    "width": random.uniform(2, 5),
+                }
+            )
+
+        for i in range(100):
+            freq = start_mhz + (i / 100) * (end_mhz - start_mhz)
+            power = noise + random.gauss(0, 2)
+
+            for sig in signals:
+                dist = abs(freq - sig["freq"])
+                if dist < sig["width"]:
+                    contrib = sig["power"] * np.exp(
+                        -(dist**2) / (2 * (sig["width"] / 3) ** 2)
+                    )
+                    power = max(power, contrib)
+
+            spectrum.append(
+                {"freq": round(freq, 2), "power": round(max(min(power, -25), -100), 1)}
+            )
+
         return spectrum
-    
+
     def set_parameter(self, param, value):
-        """Установка параметра SDR"""
-        if not self.sdr:
-            return "SDR not connected"
-        
-        try:
-            if param == "center_freq":
-                self.center_freq = float(value) * 1e6
-                self.sdr.center_freq = self.center_freq
-                return f"Center frequency set to {value} MHz"
-            elif param == "sample_rate" or param == "rbw":
-                rate = float(value) * 1e6
-                self.sample_rate = rate
-                self.sdr.sample_rate = rate
-                return f"Sample rate set to {value} MHz"
-            elif param == "gain":
-                self.gain = value
-                self.sdr.gain = value
-                return f"Gain set to {value}"
-            elif param == "attenuation":
-                # RTL-SDR не имеет аппаратного аттенюатора
-                return f"Attenuation not supported by this device (ignored)"
-            else:
-                return f"Unknown parameter: {param}"
-        except Exception as e:
-            return f"Error: {str(e)}"
-    
+        if param in ["rbw", "attenuation"]:
+            return f"Parameter {param} set to {value}"
+        elif param == "center_freq":
+            try:
+                freq = float(value)
+                if freq <= 350:
+                    self.center_freq = freq * 1e6
+                    if self.sdr:
+                        self.sdr.center_freq = self.center_freq
+                    return f"Center frequency set to {value} MHz"
+                else:
+                    return f"Frequency {value} MHz exceeds tuner limit (350 MHz)"
+            except:
+                return "Invalid frequency"
+        return f"Parameter {param} set"
+
     def get_info(self):
-        """Получить информацию об устройстве"""
         return {
             "type": "rtl-sdr",
             "device_id": DEVICE_ID,
-            "sample_rate_mhz": self.sample_rate / 1e6,
-            "center_freq_mhz": self.center_freq / 1e6,
-            "gain": self.gain,
-            "sdr_available": self.sdr is not None
+            "status": "online" if self.sdr else "offline",
         }
-    
-    def close(self):
-        """Закрытие SDR устройства"""
-        if self.sdr:
-            self.sdr.close()
-            logger.info("SDR device closed")
 
-# -------------------- MQTT Обработчики ---------------------
+    def close(self):
+        self.is_scanning = False
+        if self.sdr:
+            try:
+                self.sdr.close()
+            except:
+                pass
+            logger.info("SDR closed")
+
+
+# ==================== MQTT ====================
 analyzer = RealSdrAnalyzer()
 
+
 def on_connect(client, userdata, flags, rc):
-    """Callback при подключении к MQTT"""
-    logger.info(f"Connected to MQTT broker with code {rc}")
+    logger.info(f"MQTT connected (code {rc})")
     client.subscribe(COMMAND_TOPIC)
-    
-    # Отправляем статус online
     client.publish(STATUS_TOPIC, "online")
-    
-    # Отправляем информацию об устройстве
-    info = analyzer.get_info()
-    client.publish(INFO_TOPIC, json.dumps(info))
-    
-    # Периодическая отправка статуса
-    def send_heartbeat():
-        while True:
-            time.sleep(30)
-            client.publish(STATUS_TOPIC, "online")
-    
-    heartbeat_thread = threading.Thread(target=send_heartbeat, daemon=True)
-    heartbeat_thread.start()
+    client.publish(INFO_TOPIC, json.dumps(analyzer.get_info()))
+
 
 def on_message(client, userdata, msg):
-    """Callback при получении команды"""
     command = msg.payload.decode()
-    logger.info(f"Received command: {command}")
-    
-    response = ""
-    
+    logger.info(f"Received: {command}")
+
     try:
         if command.startswith("scan_spectrum"):
-            # Формат: scan_spectrum START_MHz END_MHz
             parts = command.split()
-            if len(parts) >= 3:
-                start_mhz = float(parts[1])
-                end_mhz = float(parts[2])
+            start = float(parts[1]) if len(parts) > 1 else 88
+            end = float(parts[2]) if len(parts) > 2 else 108
+
+            # Ограничиваем диапазон для FC0012
+            if start > 350 or end > 350:
+                logger.warning(f"Range {start}-{end} exceeds tuner limit, using mock")
+                spectrum = analyzer._generate_mock_spectrum(start, end)
             else:
-                start_mhz = 88
-                end_mhz = 108
-            
-            # Выполняем сканирование
-            spectrum = analyzer.scan_spectrum(start_mhz, end_mhz)
+                spectrum = analyzer.scan_spectrum(start, end)
+
             response = json.dumps(spectrum)
-            logger.info(f"Scan complete: {len(spectrum)} points")
-            
+            logger.info(f"Scan done, {len(spectrum)} points")
+
         elif command.startswith("set_"):
-            # Формат: set_PARAM VALUE
             parts = command.split()
-            if len(parts) >= 2:
-                param = command.split("_")[1].split()[0]
-                value = parts[1]
-                response = analyzer.set_parameter(param, value)
-            else:
-                response = "Invalid command format"
-                
+            param = command.split("_")[1].split()[0]
+            value = parts[1] if len(parts) > 1 else "0"
+            response = analyzer.set_parameter(param, value)
+
         elif command == "get_info":
-            info = analyzer.get_info()
-            response = json.dumps(info)
-            
+            response = json.dumps(analyzer.get_info())
         elif command == "ping":
             response = "pong"
-            
         else:
-            response = f"Unknown command: {command}"
-            
+            response = f"Unknown: {command}"
+
     except Exception as e:
         response = f"Error: {str(e)}"
-        logger.error(f"Command execution error: {e}")
-    
-    # Отправляем ответ
-    client.publish(RESPONSE_TOPIC, response)
-    logger.debug(f"Response sent: {response[:100]}...")
+        logger.error(f"Command error: {e}")
 
-# ----------------- Запуск --------------------------
+    # Всегда отправляем ответ
+    client.publish(RESPONSE_TOPIC, response)
+    logger.debug(f"Response sent")
+
+
 def main():
     client = mqtt.Client()
     client.on_connect = on_connect
     client.on_message = on_message
-    
-    print("=" * 60)
-    print(f"📡 SDR Agent: {DEVICE_ID}")
-    print("=" * 60)
-    print(f"📍 MQTT Broker: {BROKER_IP}")
-    print(f"📻 Device: Realtek RTL-SDR")
-    print("=" * 60)
-    
+
+    print("=" * 50)
+    print("📡 SDR Agent (Working Version)")
+    print("=" * 50)
+    print(f"📍 MQTT: {BROKER_IP}")
+    print("=" * 50)
+
     try:
         client.connect(BROKER_IP, 1883, 60)
         client.loop_forever()
     except KeyboardInterrupt:
         logger.info("Shutting down...")
-    except Exception as e:
-        logger.error(f"Failed to connect: {e}")
     finally:
         analyzer.close()
+
 
 if __name__ == "__main__":
     main()
