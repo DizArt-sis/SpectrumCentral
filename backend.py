@@ -17,7 +17,7 @@ import logging
 import os
 
 # --------------------- Конфигурация ---------------------------------
-BROKER_IP = "localhost"  # Измените на IP вашего MQTT брокера
+BROKER_IP = "127.0.0.1"  # Измените на IP вашего MQTT брокера
 MQTT_PORT = 1883
 HISTORY_LIMIT = 100
 
